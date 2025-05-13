@@ -1,1 +1,7 @@
 /.idea
+*.log
+*.sqlite3
+*.db
+*.sqlite
+.bundle
+vendor/bundle
