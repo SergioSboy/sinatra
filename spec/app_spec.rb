@@ -1,50 +1,273 @@
-# spec/app_spec.rb
-require_relative "../app"
-require "rspec"
-require "rack/test"
+# frozen_string_literal: true
 
-RSpec.describe "Sinatra App" do
+# spec/app_spec.rb
+require_relative '../app'
+require 'rspec'
+require 'rack/test'
+
+RSpec.describe 'Sinatra App' do
   include Rack::Test::Methods
 
   def app
     Sinatra::Application
   end
 
-  describe "POST /calculate" do
-    let(:json_body) do
-      {
-        user_id: 2,
-        positions: [
-          { id: 2, price: 1000, quantity: 2 },
-          { id: 3, price: 500, quantity: 1 }
-        ]
-      }.to_json
+  describe 'POST /calculate' do
+    context 'пользователь - Silver' do
+      context 'товар с дополнительной скидкой' do
+        let(:json_body) do
+          {
+            user_id: 2,
+            positions: [
+              { id: 3, price: 500, quantity: 1 }
+            ]
+          }.to_json
+        end
+
+        it 'дает скидку' do
+          post '/calculate', json_body, { 'CONTENT_TYPE' => 'application/json' }
+
+          expect(last_response.status).to eq(200)
+
+          body = JSON.parse(last_response.body)
+
+          expect(body['status']).to eq(200)
+          expect(body['user_info']).to include(
+            'name' => 'Марина',
+            'template_name' => 'Silver'
+          )
+          expect(body).to include('operation_id')
+          expect(body['amount']).to eq(400)
+          expect(body['bonuses']).to include(
+            'bonus_balance' => 10_000.0,
+            'bonuses_available' => 10_000.0,
+            'cashback_percent' => 6.25,
+            'cashback_amount' => 25.0
+          )
+          expect(body['discounts']).to include(
+            'discount_amount' => 100,
+            'discount_percent' => 20
+          )
+          expect(body['positions']).to be_an(Array)
+          expect(body['positions'].first).to include(
+            'id' => 3,
+            'price' => 500,
+            'quantity' => 1,
+            'name' => 'Хлеб',
+            'type' => 'discount',
+            'percentage' => 15.0,
+            'value' => 75
+          )
+        end
+      end
+
+      context 'товар с дополнительным кешбэком' do
+        let(:json_body) do
+          {
+            user_id: 2,
+            positions: [
+              { id: 2, price: 500, quantity: 1 }
+            ]
+          }.to_json
+        end
+
+        it 'дает скидку и кэшбэк' do
+          post '/calculate', json_body, { 'CONTENT_TYPE' => 'application/json' }
+
+          expect(last_response.status).to eq(200)
+
+          body = JSON.parse(last_response.body)
+
+          expect(body['status']).to eq(200)
+          expect(body['user_info']).to include(
+            'name' => 'Марина',
+            'template_name' => 'Silver'
+          )
+          expect(body).to include('operation_id')
+          expect(body['amount']).to eq(475.0)
+          expect(body['bonuses']).to include(
+            'bonus_balance' => 10_000.0,
+            'bonuses_available' => 10_000.0,
+            'cashback_amount' => 75.0,
+            'cashback_percent' => 15.79
+          )
+          expect(body['discounts']).to include(
+            'discount_amount' => 25,
+            'discount_percent' => 5.0
+          )
+          expect(body['positions']).to be_an(Array)
+          expect(body['positions'].first).to include(
+            'id' => 2,
+            'price' => 500,
+            'quantity' => 1,
+            'name' => 'Молоко',
+            'type' => 'increased_cashback',
+            'percentage' => 10.0,
+            'value' => 50.0
+          )
+        end
+      end
+
+      context 'товар без лояльности' do
+        let(:json_body) do
+          {
+            user_id: 2,
+            positions: [
+              { id: 4, price: 500, quantity: 1 }
+            ]
+          }.to_json
+        end
+
+        it 'не дает скидку и кэшбэк' do
+          post '/calculate', json_body, { 'CONTENT_TYPE' => 'application/json' }
+
+          expect(last_response.status).to eq(200)
+
+          body = JSON.parse(last_response.body)
+
+          expect(body['status']).to eq(200)
+          expect(body['user_info']).to include(
+            'name' => 'Марина',
+            'template_name' => 'Silver'
+          )
+          expect(body).to include('operation_id')
+          expect(body['amount']).to eq(475.0)
+
+          expect(body['bonuses']).to include(
+            'bonus_balance' => 10_000.0,
+            'bonuses_available' => 10_000.0,
+            'cashback_amount' => 25.0,
+            'cashback_percent' => 5.26
+          )
+
+          expect(body['discounts']).to include(
+            'discount_amount' => 25.0,
+            'discount_percent' => 5.0
+          )
+
+          expect(body['positions']).to be_an(Array)
+          expect(body['positions'].first).to include(
+            'id' => 4,
+            'price' => 500,
+            'quantity' => 1,
+            'name' => 'Сахар',
+            'type' => 'noloyalty',
+            'percentage' => 0.0,
+            'value' => 0.0
+          )
+        end
+      end
     end
 
-    it "returns 200" do
-      post "/calculate", json_body, { "CONTENT_TYPE" => "application/json" }
+    context 'пользователь - Bronze' do
+      context 'товар с дополнительной скидкой' do
+        let(:json_body) do
+          {
+            user_id: 1,
+            positions: [
+              { id: 3, price: 500, quantity: 1 }
+            ]
+          }.to_json
+        end
 
-      expect(last_response.status).to eq(200)
+        it 'дает скидку' do
+          post '/calculate', json_body, { 'CONTENT_TYPE' => 'application/json' }
 
-      body = JSON.parse(last_response.body)
+          expect(last_response.status).to eq(200)
+        end
+      end
 
-      expect(body).to include("total_before_discount", "total_after_discount", "bonuses_awarded")
-      expect(body["positions"]).to be_an(Array)
-      expect(body["positions"].first).to include("id", "final_price", "discount", "cashback")
+      context 'товар с дополнительным кешбэком' do
+        let(:json_body) do
+          {
+            user_id: 2,
+            positions: [
+              { id: 2, price: 500, quantity: 1 }
+            ]
+          }.to_json
+        end
+
+        it 'дает скидку и кэшбэк' do
+          post '/calculate', json_body, { 'CONTENT_TYPE' => 'application/json' }
+
+          expect(last_response.status).to eq(200)
+        end
+      end
+
+      context 'товар без лояльности' do
+        let(:json_body) do
+          {
+            user_id: 2,
+            positions: [
+              { id: 4, price: 500, quantity: 1 }
+            ]
+          }.to_json
+        end
+
+        it 'дает скидку и кэшбэк' do
+          post '/calculate', json_body, { 'CONTENT_TYPE' => 'application/json' }
+
+          expect(last_response.status).to eq(200)
+        end
+      end
     end
 
-    it "продукт без скидок и кешбэка" do
-      post "/calculate", {
-        user_id: 2,
-        positions: [{ id: 4, price: 500, quantity: 1 }]
-      }.to_json, { "CONTENT_TYPE" => "application/json" }
+    context 'пользователь - Gold' do
+      context 'товар с дополнительной скидкой' do
+        let(:json_body) do
+          {
+            user_id: 3,
+            positions: [
+              { id: 3, price: 500, quantity: 1 }
+            ]
+          }.to_json
+        end
 
-      expect(last_response.status).to eq(200)
-      body = JSON.parse(last_response.body)
-      pos = body["positions"].first
+        it 'дает скидку' do
+          post '/calculate', json_body, { 'CONTENT_TYPE' => 'application/json' }
 
-      expect(pos["discount"]).to eq(0.0)
-      expect(pos["cashback"]).to eq(0.0)
+          expect(last_response.status).to eq(200)
+        end
+      end
+
+      context 'товар с дополнительным кешбэком' do
+        let(:json_body) do
+          {
+            user_id: 3,
+            positions: [
+              { id: 2, price: 500, quantity: 1 }
+            ]
+          }.to_json
+        end
+
+        it 'дает скидку и кэшбэк' do
+          post '/calculate', json_body, { 'CONTENT_TYPE' => 'application/json' }
+
+          expect(last_response.status).to eq(200)
+        end
+      end
+
+      context 'товар без лояльности' do
+        let(:json_body) do
+          {
+            user_id: 3,
+            positions: [
+              { id: 4, price: 500, quantity: 1 }
+            ]
+          }.to_json
+        end
+
+        it 'дает скидку и кэшбэк' do
+          post '/calculate', json_body, { 'CONTENT_TYPE' => 'application/json' }
+
+          expect(last_response.status).to eq(200)
+        end
+      end
+    end
+  end
+
+  describe 'POST /operations/:id/confirm' do
+    it 'returns 200' do
     end
   end
 end

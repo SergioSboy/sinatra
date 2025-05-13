@@ -1,54 +1,92 @@
-# lib/calculator.rb
-require_relative "strategies/bronze_strategy"
-require_relative "strategies/silver_strategy"
-require_relative "strategies/gold_strategy"
+# frozen_string_literal: true
+
+require_relative 'strategies/bronze_strategy'
+require_relative 'strategies/silver_strategy'
+require_relative 'strategies/gold_strategy'
 
 def strategy_for(loyalty)
   case loyalty.downcase
-  when "bronze" then BronzeStrategy
-  when "silver" then SilverStrategy
-  when "gold"   then GoldStrategy
+  when 'bronze' then BronzeStrategy
+  when 'silver' then SilverStrategy
+  when 'gold'   then GoldStrategy
   else BaseStrategy
   end
 end
 
+def process_position(pos, template)
+  product = Product[pos[:id]]
+  strategy = strategy_for(template.name).new(product, template, pos)
+
+  full = strategy.amount
+  discount = strategy.discount
+  cashback = strategy.cashback
+  final = full - discount
+
+  position_data = {
+    id: pos[:id],
+    quantity: pos[:quantity],
+    price: pos[:price],
+    name: product.name,
+    type: product.type,
+    percentage: product.value.to_f,
+    value: pos[:price] * (product.value.to_f / 100.0)
+  }
+
+  [position_data, full, discount, cashback, final]
+end
+
 def calculate_order(user_id:, positions:)
   user = User[user_id]
-  loyalty_name = user.template.name
+  template = user.template
 
   result = {
-    total_before_discount: 0,
-    total_discount: 0,
-    total_after_discount: 0,
-    bonuses_awarded: 0,
+    total_before_discount: 0.0,
+    total_discount: 0.0,
+    amount: 0.0,
+    bonuses: { cashback_amount: 0.0 },
+    discounts: {},
     positions: []
   }
 
   positions.each do |pos|
-    product = Product[pos[:id]]
-    strategy = strategy_for(loyalty_name).new(product, pos)
+    position_data, full, discount, cashback, final = process_position(pos, template)
 
-    full = strategy.full_price
-    discount = strategy.discount
-    cashback = strategy.cashback
-    final = full - discount
-
-    result[:positions] << {
-      id: pos[:id],
-      quantity: pos[:quantity],
-      price: pos[:price],
-      full_price: full.round(2),
-      discount: discount.round(2),
-      final_price: final.round(2),
-      cashback: cashback.round(2)
-    }
-
+    result[:positions] << position_data
     result[:total_before_discount] += full
     result[:total_discount] += discount
-    result[:total_after_discount] += final
-    result[:bonuses_awarded] += cashback
+    result[:amount] += final
+    result[:bonuses][:cashback_amount] += cashback
   end
 
-  result.each { |k, v| result[k] = v.round(2) if v.is_a?(Numeric) }
-  result
+  result[:discounts][:discount_amount] = result[:total_discount]
+  result[:discounts][:discount_percent] =
+    calculate_discount_percent(result[:total_before_discount], result[:total_discount])
+  result[:bonuses][:cashback_percent] = calculate_cashback_percent(result[:amount], result[:bonuses][:cashback_amount])
+
+  deep_round(result)
+end
+
+def deep_round(data, precision = 2)
+  case data
+  when Hash
+    data.transform_values { |v| deep_round(v, precision) }
+  when Array
+    data.map { |v| deep_round(v, precision) }
+  when Numeric
+    data.round(precision)
+  else
+    data
+  end
+end
+
+def calculate_discount_percent(total_before, total_discount)
+  return 0.0 if total_before.zero?
+
+  (total_discount / total_before) * 100
+end
+
+def calculate_cashback_percent(amount, cashback)
+  return 0.0 if amount.zero?
+
+  (cashback / amount) * 100
 end

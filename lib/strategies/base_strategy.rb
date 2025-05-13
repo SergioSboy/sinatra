@@ -1,10 +1,13 @@
+# frozen_string_literal: true
+
 class BaseStrategy
-  def initialize(product, position)
+  def initialize(product, template, position)
     @product = product
+    @template = template
     @position = position
   end
 
-  def full_price
+  def amount
     @position[:price] * @position[:quantity]
   end
 

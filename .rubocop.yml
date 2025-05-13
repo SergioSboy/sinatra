@@ -1,0 +1,22 @@
+AllCops:
+  NewCops: enable
+
+Metrics/BlockLength:
+  Exclude:
+    - spec/**/*.rb
+
+Layout/LineLength:
+  Exclude:
+    - spec/**/*.rb
+
+Style/Documentation:
+  Enabled: false
+
+Metrics/ParameterLists:
+  Max: 10
+
+Metrics/MethodLength:
+  Max: 50
+
+Metrics/AbcSize:
+  Max: 50
