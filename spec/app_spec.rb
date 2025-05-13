@@ -4,6 +4,7 @@
 require_relative '../app'
 require 'rspec'
 require 'rack/test'
+require_relative '../db/models/operation'
 
 RSpec.describe 'Sinatra App' do
   include Rack::Test::Methods
@@ -267,7 +268,55 @@ RSpec.describe 'Sinatra App' do
   end
 
   describe 'POST /operations/:id/confirm' do
-    it 'returns 200' do
+    let!(:user) do
+      User.create(name: 'Марина', bonus: 10_000, template_id: 2)
+    end
+
+    let!(:operation) do
+      Operation.create(
+        user_id: user.id,
+        cashback: 75.0,
+        cashback_percent: 15.0,
+        discount: 25.0,
+        discount_percent: 5.0,
+        write_off: 0,
+        allowed_write_off: 300.0,
+        done: false,
+        check_summ: 500.0
+      )
+    end
+
+    let(:json_body) do
+      {
+        user: { id: user.id },
+        write_off: 200
+      }.to_json
+    end
+
+    it 'подтверждает операцию и возвращает корректные данные' do
+      post "/operations/#{operation.id}/confirm", json_body, { 'CONTENT_TYPE' => 'application/json' }
+
+      expect(last_response.status).to eq(200)
+
+      body = JSON.parse(last_response.body)
+
+      expect(body['status']).to eq('ok')
+      expect(body['message']).to eq('Операция подтверждена')
+
+      expect(body['operation']).to include(
+        'user_id' => user.id,
+        'earned_bonus' => 75.0,
+        'total_cashback_percent' => 15.0,
+        'total_discount' => 25.0,
+        'total_discount_percent' => 5.0,
+        'bonus_written_off' => 200.0,
+        'final_amount' => 300.0
+      )
+
+      operation.reload
+      expect(operation.write_off).to eq(200.0)
+      expect(operation.check_summ).to eq(300.0)
+      expect(operation.done).to eq(true)
     end
   end
 end
